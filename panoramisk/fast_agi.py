@@ -2,16 +2,19 @@ import logging
 import asyncio
 from collections import OrderedDict
 from .utils import parse_agi_result
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
 
 log = logging.getLogger(__name__)
 
 
 class Request:
-    def __init__(self, app, headers, reader, writer, encoding='utf-8'):
+    def __init__(self, app, headers, reader, writer, query_parameter, encoding='utf-8'):
         self.app = app
         self.headers = headers
         self.reader = reader
         self.writer = writer
+        self.query_parameter = query_parameter
         self.encoding = encoding
 
     async def send_command(self, command):
@@ -156,11 +159,15 @@ class Application(dict):
         log.debug("Asterisk Headers: %r", headers)
 
         if agi_network_script is not None:
-            route = self._route.get(agi_network_script)
+            parse_result = urlparse(agi_network_script)
+            query_parameter = parse_qs(parse_result.query)
+
+            route = self._route.get(parse_result.path)
             if route is not None:
                 request = Request(app=self,
                                   headers=headers,
                                   reader=reader, writer=writer,
+                                  query_parameter=query_parameter,
                                   encoding=self.default_encoding)
                 try:
                     await route(request)
@@ -170,7 +177,7 @@ class Application(dict):
                         agi_network_script
                     )
             else:
-                log.error('No route for the request "%s"', agi_network_script)
+                log.error('No route "%s" for the request "%s"', parse_result.path, agi_network_script)
         else:
             log.error('No agi_network_script header for the request')
         log.debug("Closing client socket")
